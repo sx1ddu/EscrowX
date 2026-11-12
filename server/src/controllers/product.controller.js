@@ -46,15 +46,38 @@ try {
 
 // @GET /api/products — Get all products with search + filter
 export const getProducts = asyncHandler(async (req, res) => {
-  const { search, category, minPrice, maxPrice, condition, sort = '-createdAt', page = 1, limit = 12 } = req.query;
+  const { search, category, minPrice, maxPrice, condition, seller, status, sort = '-createdAt', page = 1, limit = 12 } = req.query;
 
-  // Cache key
+  let sellerId = null;
+  if (seller === 'me') {
+    if (!req.user) return errorResponse(res, 401, 'Authentication required to view your listings.');
+    sellerId = req.user._id;
+  } else if (seller) {
+    sellerId = seller;
+  }
+
+  // Seller-scoped queries bypass public cache
+  const isSellerQuery = Boolean(sellerId);
   const redis    = getRedis();
   const cacheKey = `products:${JSON.stringify(req.query)}`;
-  const cached   = await redis.get(cacheKey);
-  if (cached) return successResponse(res, 200, 'Products fetched (cached).', JSON.parse(cached));
 
-  const filter = { status: 'active' };
+  if (!isSellerQuery) {
+    const cached = await redis.get(cacheKey);
+    if (cached) return successResponse(res, 200, 'Products fetched (cached).', JSON.parse(cached));
+  }
+
+  const filter = {};
+  if (sellerId) {
+    filter.seller = sellerId;
+    if (status) {
+      filter.status = status;
+    } else {
+      filter.status = { $ne: 'deleted' };
+    }
+  } else {
+    filter.status = 'active';
+  }
+
   if (search)   filter.$text = { $search: search };
   if (category) filter.category = category;
   if (condition) filter.condition = condition;
@@ -74,7 +97,9 @@ export const getProducts = asyncHandler(async (req, res) => {
   ]);
 
   const data = { products, total, page: parseInt(page), totalPages: Math.ceil(total / limit) };
-  await redis.setex(cacheKey, 60, JSON.stringify(data)); // cache 60s
+  if (!isSellerQuery) {
+    await redis.setex(cacheKey, 60, JSON.stringify(data)); // cache 60s
+  }
 
   successResponse(res, 200, 'Products fetched.', data);
 });
