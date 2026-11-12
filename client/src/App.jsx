@@ -11,10 +11,12 @@ import MainLayout from './components/layout/MainLayout.jsx';
 import DashboardLayout from './components/layout/DashboardLayout.jsx';
 
 // Auth Pages
-import LoginPage      from './pages/auth/LoginPage.jsx';
-import RegisterPage   from './pages/auth/RegisterPage.jsx';
-import VerifyOTPPage  from './pages/auth/VerifyOTPPage.jsx';
-import OAuthCallback  from './pages/auth/OAuthCallback.jsx';
+import LoginPage          from './pages/auth/LoginPage.jsx';
+import RegisterPage       from './pages/auth/RegisterPage.jsx';
+import VerifyOTPPage      from './pages/auth/VerifyOTPPage.jsx';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage.jsx';
+import ResetPasswordPage  from './pages/auth/ResetPasswordPage.jsx';
+import OAuthCallback      from './pages/auth/OAuthCallback.jsx';
 
 // Buyer Pages
 import HomePage       from './pages/buyer/HomePage.jsx';
@@ -66,10 +68,12 @@ function App() {
       <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
       <Routes>
         {/* Auth */}
-        <Route path="/login"         element={<LoginPage />} />
-        <Route path="/register"      element={<RegisterPage />} />
-        <Route path="/verify-otp"    element={<VerifyOTPPage />} />
-        <Route path="/auth/callback" element={<OAuthCallback />} />
+        <Route path="/login"           element={<LoginPage />} />
+        <Route path="/register"        element={<RegisterPage />} />
+        <Route path="/verify-otp"      element={<VerifyOTPPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password"  element={<ResetPasswordPage />} />
+        <Route path="/auth/callback"   element={<OAuthCallback />} />
 
         {/* Public routes with main layout */}
         <Route element={<MainLayout />}>
