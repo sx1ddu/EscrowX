@@ -1,12 +1,14 @@
 {
-  "name": "server",
+  "name": "escrowx-server",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "dev": "nodemon src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "migrate:db": "node scripts/migrateDatabase.js",
+    "test": "node --test --test-force-exit tests/**/*.test.js"
   },
   "keywords": [],
   "author": "",
