@@ -11,6 +11,7 @@ import {connectRedis} from './config/redis.js';
 import { initSocket } from './sockets/index.js';
 import { globalErrorHandler , notFound } from './middlewares/errorHandler.js';
 import { globalRateLimiter } from './middlewares/rateLimiter.js';
+import { sanitizeNoSQL } from './middlewares/validate.js';
 import logger from './utils/logger.js';
 
 //routes 
@@ -49,6 +50,7 @@ app.use(morgan('dev'));
 app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), razorpayWebhook);
 app.use(express.json({limit: '10mb'}));
 app.use(express.urlencoded({extended:true}));
+app.use(sanitizeNoSQL);
 app.use(cookieParser());
 app.use('/api', globalRateLimiter);
 app.use(passport.initialize());

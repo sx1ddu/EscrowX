@@ -2,12 +2,12 @@ import express from 'express';
 import {getMe, updateMe, getUserById } from '../controllers/user.controller.js';
 import { protect } from '../middlewares/auth.middleware.js';
 import { upload } from '../config/cloudinary.js';
-
+import { validateObjectId } from '../middlewares/validate.js';
 
 const router = express.Router();
  
-router.get('/me',   protect,getMe);
-router.put('/me',  protect, upload.single('avatar'),updateMe);
-router.get('/:id', getUserById);
+router.get('/me',   protect, getMe);
+router.put('/me',   protect, upload.single('avatar'), updateMe);
+router.get('/:id',  validateObjectId('id'), getUserById);
  
 export default router;
