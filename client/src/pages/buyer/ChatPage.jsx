@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { Send, MessageSquare } from 'lucide-react';
 import api from '../../store/api/axios.js';
+import { getActiveSocket } from '../../hooks/useSocket.js';
 
 const ChatPage = () => {
   const { chatId } = useParams();
@@ -20,16 +21,51 @@ const ChatPage = () => {
   useEffect(() => {
     if (!active) return;
     api.get(`/chats/${active}`).then(({ data }) => setMessages(data.data?.messages || [])).catch(() => {});
+
+    const socket = getActiveSocket();
+    if (socket) {
+      socket.emit('JOIN_CHAT', active);
+      const handleIncomingMessage = ({ chatId: incomingChatId, message }) => {
+        if (incomingChatId === active) {
+          setMessages(prev => {
+            if (message._id && prev.some(m => m._id === message._id)) return prev;
+            return [...prev, message];
+          });
+        }
+      };
+      socket.on('NEW_MESSAGE', handleIncomingMessage);
+      return () => {
+        socket.emit('LEAVE_CHAT', active);
+        socket.off('NEW_MESSAGE', handleIncomingMessage);
+      };
+    }
   }, [active]);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const sendMessage = async () => {
     if (!input.trim() || !active) return;
-    const msg = { content: input, sender: { _id: user._id, name: user.name }, type: 'text', createdAt: new Date() };
-    setMessages(m => [...m, msg]);
+    const currentInput = input.trim();
+    const optimisticMsg = {
+      content: currentInput,
+      sender: { _id: user._id, name: user.name },
+      type: 'text',
+      createdAt: new Date(),
+    };
+    setMessages(m => [...m, optimisticMsg]);
     setInput('');
-    try { await api.post(`/chats/${active}/messages`, { content: input }); } catch (_) {}
+
+    try {
+      const { data } = await api.post(`/chats/${active}/messages`, { content: currentInput });
+      if (data.data?.message) {
+        setMessages(prev => {
+          const filtered = prev.filter(m => m !== optimisticMsg);
+          return [...filtered, data.data.message];
+        });
+      }
+    } catch (err) {
+      console.error('Failed to send message:', err);
+    }
   };
 
   return (

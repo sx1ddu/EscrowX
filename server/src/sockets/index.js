@@ -1,5 +1,6 @@
 import { Server } from 'socket.io';
 import { verifyAccessToken } from '../utils/jwt.js';
+import Chat from '../models/chat.model.js';
 import logger from '../utils/logger.js';
 
 let io;
@@ -28,12 +29,28 @@ export const initSocket = (server) => {
     onlineUsers.set(userId, socket.id);
     logger.info(`🔌 Socket connected: ${userId}`);
 
-    // Join personal room
+    // Join personal room for private notifications
     socket.join(userId);
 
-    // Join chat room
-    socket.on('JOIN_CHAT', (chatId) => socket.join(`chat:${chatId}`));
-    socket.on('LEAVE_CHAT', (chatId) => socket.leave(`chat:${chatId}`));
+    // Join chat room with participant authorization
+    socket.on('JOIN_CHAT', async (chatId) => {
+      try {
+        if (!chatId) return;
+        const chat = await Chat.findById(chatId).select('participants isBlocked');
+        if (!chat || chat.isBlocked) return;
+
+        const isMember = chat.participants.some(p => p.toString() === userId.toString());
+        if (isMember) {
+          socket.join(`chat:${chatId}`);
+        }
+      } catch (err) {
+        logger.error(`Error in JOIN_CHAT for ${chatId}:`, err);
+      }
+    });
+
+    socket.on('LEAVE_CHAT', (chatId) => {
+      if (chatId) socket.leave(`chat:${chatId}`);
+    });
 
     // Real-time message
     socket.on('SEND_MESSAGE', async (data) => {

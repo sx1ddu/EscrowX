@@ -7,6 +7,9 @@ import { addMessage } from '../store/slices/chat.slice.js';
 import { SOCKET_URL } from '../constants/index.js';
 import { emitOrderStatus } from '../utils/orderEvents.js';
 
+let activeSocket = null;
+export const getActiveSocket = () => activeSocket;
+
 export const useSocket = (user) => {
   const socketRef = useRef(null);
   const dispatch  = useDispatch();
@@ -15,6 +18,7 @@ export const useSocket = (user) => {
     if (!user) return;
     const token = localStorage.getItem('accessToken');
     socketRef.current = io(SOCKET_URL, { auth: { token }, withCredentials: true });
+    activeSocket = socketRef.current;
 
     const socket = socketRef.current;
 
@@ -65,7 +69,10 @@ export const useSocket = (user) => {
 
     socket.on('connect_error', (err) => console.error('Socket error:', err.message));
 
-    return () => { socket.disconnect(); };
+    return () => {
+      socket.disconnect();
+      activeSocket = null;
+    };
   }, [user, dispatch]);
 
   return socketRef;
