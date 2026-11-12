@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
-import { CheckCircle, Clock, Truck, AlertTriangle, DollarSign } from 'lucide-react';
+import { useDispatch, useSelector } from 'react-redux';
+import { CheckCircle, Clock, Truck, AlertTriangle, DollarSign, Star, X } from 'lucide-react';
 import api from '../../store/api/axios.js';
 import EscrowBadge from '../../components/common/EscrowBadge.jsx';
 import Loader from '../../components/common/Loader.jsx';
@@ -29,12 +29,18 @@ const OrderDetailPage = () => {
   const { id } = useParams();
   const location = useLocation();
   const dispatch = useDispatch();
+  const { user } = useSelector(state => state.auth);
   const [order, setOrder] = useState(location.state?.order || null);
   const [loading, setLoading] = useState(!location.state?.order);
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [disputeReason, setDisputeReason] = useState(disputeReasons[0]);
   const [disputeDescription, setDisputeDescription] = useState('');
   const [disputeLoading, setDisputeLoading] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const { initiatePayment, confirmDelivery, loading: paymentLoading } = usePayment();
 
   const syncOrder = useCallback((updatedOrder, notify = false) => {
@@ -79,8 +85,8 @@ const OrderDetailPage = () => {
       fetchOrder();
     };
 
-    window.addEventListener('trusttrade:order-status', handleOrderStatus);
-    return () => window.removeEventListener('trusttrade:order-status', handleOrderStatus);
+    window.addEventListener('escrowx:order-status', handleOrderStatus);
+    return () => window.removeEventListener('escrowx:order-status', handleOrderStatus);
   }, [fetchOrder, id, syncOrder]);
 
   const closeDisputeModal = () => {
@@ -122,6 +128,28 @@ const OrderDetailPage = () => {
       toast.error(err.response?.data?.message || 'Failed to raise dispute.');
     } finally {
       setDisputeLoading(false);
+    }
+  };
+
+  const submitReview = async (e) => {
+    e.preventDefault();
+    if (!reviewRating) return toast.error('Please select a star rating.');
+
+    setReviewLoading(true);
+    try {
+      await api.post('/reviews', {
+        orderId: order._id,
+        rating: reviewRating,
+        comment: reviewComment.trim(),
+        type: 'buyer_to_seller',
+      });
+      toast.success('Review submitted successfully! Thank you for your feedback.');
+      setReviewSubmitted(true);
+      setShowReviewModal(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to submit review.');
+    } finally {
+      setReviewLoading(false);
     }
   };
 
@@ -196,11 +224,99 @@ const OrderDetailPage = () => {
           </button>
         )}
         {order.escrowStatus === 'released' && (
-          <div className="text-center text-green-600 font-semibold py-3">
-            ✅ Transaction Complete — Funds Released to Seller
+          <div className="space-y-3">
+            <div className="text-center text-green-600 font-semibold py-2 bg-green-50 rounded-lg">
+              ✅ Transaction Complete — Funds Released to Seller
+            </div>
+            {order.buyer?._id === user?._id && !reviewSubmitted && (
+              <button
+                onClick={() => setShowReviewModal(true)}
+                className="w-full flex items-center justify-center gap-2 bg-amber-500 text-white py-2.5 rounded-lg font-semibold hover:bg-amber-600 transition"
+              >
+                <Star className="w-4 h-4 fill-white" /> Leave Seller Review
+              </button>
+            )}
+            {reviewSubmitted && (
+              <div className="text-center text-xs text-amber-700 bg-amber-50 py-2 rounded-lg font-medium">
+                ⭐ Thank you! Your review has been recorded.
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* Review Modal */}
+      {showReviewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md bg-white border border-gray-200 rounded-xl p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Review Seller</h2>
+                <p className="text-xs text-gray-500 mt-1">Rate your experience with {order.seller?.name || 'the seller'}</p>
+              </div>
+              <button onClick={() => setShowReviewModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={submitReview} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                  Rating
+                </label>
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setReviewRating(star)}
+                      className="p-1 focus:outline-none transition"
+                    >
+                      <Star
+                        className={`w-7 h-7 ${
+                          star <= reviewRating ? 'text-amber-400 fill-amber-400' : 'text-gray-300'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                  <span className="text-sm font-semibold text-gray-700 ml-2">{reviewRating} / 5</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                  Feedback & Comments
+                </label>
+                <textarea
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder="Share details of your purchase experience, packaging, and communication..."
+                  rows={4}
+                  className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowReviewModal(false)}
+                  disabled={reviewLoading}
+                  className="px-4 py-2 border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={reviewLoading}
+                  className="px-5 py-2 bg-amber-500 text-white rounded-lg text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 transition"
+                >
+                  {reviewLoading ? 'Submitting...' : 'Submit Review'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showDisputeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">

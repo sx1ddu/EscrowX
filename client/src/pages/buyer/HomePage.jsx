@@ -14,10 +14,11 @@ const HomePage = () => {
   const { products, loading, total, totalPages } = useSelector(s => s.products);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({ category:'', minPrice:'', maxPrice:'', condition:'', sort:'-createdAt' });
+  const searchQuery = searchParams.get('search') || '';
 
   useEffect(() => {
-    dispatch(fetchProducts({ ...filters, search: searchParams.get('search') || '', page }));
-  }, [filters, page, searchParams.get('search')]);
+    dispatch(fetchProducts({ ...filters, search: searchQuery, page }));
+  }, [dispatch, filters, page, searchQuery]);
 
   return (
     <div>

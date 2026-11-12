@@ -24,9 +24,8 @@ const CreateProduct = () => {
   const [images, setImages] = useState([]);
   const [previews, setPreviews] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
 
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
+  const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(schema)
   });
 

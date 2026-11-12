@@ -1,5 +1,5 @@
 import { useSelector } from 'react-redux';
-import { User, Mail, MapPin, Star, ShoppingBag } from 'lucide-react';
+import { User, Mail, Star, ShoppingBag } from 'lucide-react';
 
 const ProfilePage = () => {
   const { user } = useSelector(s => s.auth);
