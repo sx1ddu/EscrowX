@@ -57,8 +57,8 @@ const SellerDashboard = () => {
       if (status === 'released' || status === 'refunded') fetchDashboard();
     };
 
-    window.addEventListener('trusttrade:order-status', handleOrderStatus);
-    return () => window.removeEventListener('trusttrade:order-status', handleOrderStatus);
+    window.addEventListener('escrowx:order-status', handleOrderStatus);
+    return () => window.removeEventListener('escrowx:order-status', handleOrderStatus);
   }, [fetchDashboard]);
 
   const chartData = [

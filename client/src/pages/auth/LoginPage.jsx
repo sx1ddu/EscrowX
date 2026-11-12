@@ -33,7 +33,7 @@ const LoginPage = () => {
       <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
         <div className="flex items-center gap-2 justify-center mb-8">
           <Shield className="w-7 h-7 text-indigo-600" />
-          <span className="text-2xl font-bold text-gray-900">TrustTrade</span>
+          <span className="text-2xl font-bold text-gray-900">EscrowX</span>
         </div>
 
         <h1 className="text-xl font-semibold text-gray-800 mb-1">Welcome back</h1>

@@ -11,7 +11,7 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
     cloudinary,
     params: {
-        folder: 'trusttrade',
+        folder: process.env.CLOUDINARY_FOLDER || 'escrowx',
         allowed_formats: ['jpg','jpeg','png','webp','pdf'],
         transformation: [{width:1000, crop: 'limit' }],
     },

@@ -32,11 +32,11 @@ const RegisterPage = () => {
       <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
         <div className="flex items-center gap-2 justify-center mb-8">
           <Shield className="w-7 h-7 text-indigo-600" />
-          <span className="text-2xl font-bold text-gray-900">TrustTrade</span>
+          <span className="text-2xl font-bold text-gray-900">EscrowX</span>
         </div>
 
         <h1 className="text-xl font-semibold text-gray-800 mb-1">Create account</h1>
-        <p className="text-sm text-gray-500 mb-6">Join TrustTrade for secure buying & selling</p>
+        <p className="text-sm text-gray-500 mb-6">Join EscrowX for secure buying & selling</p>
 
         {/* Role Toggle */}
         <div className="flex bg-gray-100 rounded-lg p-1 mb-6">

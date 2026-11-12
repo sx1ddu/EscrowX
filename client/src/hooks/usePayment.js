@@ -27,7 +27,7 @@ export const usePayment = () => {
         amount,
         currency,
         order_id: razorpayOrderId,
-        name:     'TrustTrade',
+        name:     'EscrowX',
         description: 'Secure Escrow Payment',
         theme:    { color: '#6366f1' },
         handler: async (response) => {

@@ -30,7 +30,7 @@ const Navbar = () => {
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 font-bold text-xl text-indigo-600">
           <Shield className="w-6 h-6" />
-          TrustTrade
+          EscrowX
         </Link>
 
         {/* Search */}

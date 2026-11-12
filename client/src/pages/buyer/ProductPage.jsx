@@ -37,8 +37,8 @@ const ProductPage = () => {
       navigate(`/orders/${checkoutOrderId}`, { state: { order } });
     };
 
-    window.addEventListener('trusttrade:order-status', handleOrderStatus);
-    return () => window.removeEventListener('trusttrade:order-status', handleOrderStatus);
+    window.addEventListener('escrowx:order-status', handleOrderStatus);
+    return () => window.removeEventListener('escrowx:order-status', handleOrderStatus);
   }, [checkoutOrderId, navigate]);
 
   /* ── Buy Now → place order → open Razorpay ── */
@@ -69,7 +69,7 @@ const ProductPage = () => {
         amount,
         currency,
         order_id:    razorpayOrderId,
-        name:        'TrustTrade',
+        name:        'EscrowX',
         description: 'Secure Escrow Payment',
         theme:       { color: '#4f46e5' },
         handler: async (response) => {
@@ -215,7 +215,7 @@ const ProductPage = () => {
             <Shield className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-semibold text-indigo-700">
-                Protected by TrustTrade Escrow
+                Protected by EscrowX Escrow
               </p>
               <p className="text-xs text-indigo-500 mt-0.5">
                 Your payment is held securely until you confirm delivery.
