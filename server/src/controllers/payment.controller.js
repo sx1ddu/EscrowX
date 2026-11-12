@@ -2,13 +2,13 @@ import asyncHandler from 'express-async-handler';
 import crypto from 'crypto';
 import razorpay from '../config/razorpay.js';
 import Order from '../models/order.model.js';
-import Product from '../models/product.model.js';
 import User from '../models/user.model.js';
-import { sendEmail } from '../utils/email.js';
+import Transaction from '../models/transaction.model.js';
+import Payout from '../models/payout.model.js';
+import EscrowService from '../services/escrow.service.js';
+import LedgerService from '../services/ledger.service.js';
 import { successResponse, errorResponse } from '../utils/apiResponse.js';
 import { getRedis } from '../config/redis.js';
-import { notifyUser } from '../sockets/index.js';
-import { scheduleAutoRelease } from '../jobs/escrow.job.js';
 import { generateIdempotencyKey } from '../utils/jwt.js';
 
 const PAYMENT_LOCK_TTL_SECONDS = 300;
@@ -18,41 +18,11 @@ const populateOrder = (query) => query.populate('buyer seller product');
 
 const deletePaymentLock = async (orderId) => {
   if (!orderId) return;
-  // Payment locks only prevent parallel checkout creation; after verification they must be removed immediately.
-  // The Redis TTL is crash recovery, not the normal path, otherwise paid orders can appear stuck for 300 seconds.
-  await getRedis().del(paymentLockKey(orderId));
-};
-
-const fundOrderFromPayment = async (order, payload) => {
-  if (order.payment.status === 'paid' || order.escrowStatus === 'funded')
-    return order;
-
-  const fundedOrder = await Order.findOneAndUpdate(
-    { _id: order._id, escrowStatus: 'pending', 'payment.status': { $ne: 'paid' } },
-    {
-      $set: {
-        'payment.razorpayPaymentId': payload.id,
-        'payment.method': payload.method,
-        'payment.status': 'paid',
-        escrowStatus: 'funded',
-        escrowHeldAt: new Date(),
-      },
-      $push: { timeline: { status: 'funded', message: 'Payment received and held in escrow.' } },
-    },
-    { new: true }
-  ).populate('buyer seller product');
-
-  if (!fundedOrder) return populateOrder(Order.findById(order._id));
-
-  await Product.findByIdAndUpdate(fundedOrder.product._id || fundedOrder.product, { status: 'sold' });
-
-  notifyUser(fundedOrder.buyer._id.toString(), 'ORDER_FUNDED', { orderId: fundedOrder._id });
-  notifyUser(fundedOrder.seller._id.toString(), 'ORDER_FUNDED', { orderId: fundedOrder._id });
-
-  await sendEmail({ to: fundedOrder.buyer.email, template: 'orderPlaced', data: fundedOrder });
-  await scheduleAutoRelease(fundedOrder._id.toString(), 7 * 24 * 60 * 60 * 1000);
-
-  return fundedOrder;
+  try {
+    await getRedis().del(paymentLockKey(orderId));
+  } catch (err) {
+    // Non-fatal, Redis TTL will clean up
+  }
 };
 
 export const createPaymentOrder = asyncHandler(async (req, res) => {
@@ -127,13 +97,13 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     if (order.escrowStatus !== 'pending')
       return errorResponse(res, 400, `Cannot verify payment in status: ${order.escrowStatus}`);
 
-    await fundOrderFromPayment(order, {
-      id: razorpay_payment_id,
-      method: 'razorpay_checkout',
+    const fundedOrder = await EscrowService.fundOrder({
+      orderId: order._id,
+      paymentId: razorpay_payment_id,
+      method: 'razorpay',
     });
 
-    const updatedOrder = await populateOrder(Order.findById(order._id));
-    successResponse(res, 200, 'Payment verified. Funds held in escrow.', { order: updatedOrder });
+    successResponse(res, 200, 'Payment verified. Funds held in escrow.', { order: fundedOrder });
   } finally {
     await deletePaymentLock(order._id);
   }
@@ -168,7 +138,13 @@ export const razorpayWebhook = asyncHandler(async (req, res) => {
     if (!acquired) return res.status(200).json({ received: true, idempotent: true });
 
     try {
-      if (order.escrowStatus === 'pending') await fundOrderFromPayment(order, payload);
+      if (order.escrowStatus === 'pending') {
+        await EscrowService.fundOrder({
+          orderId: order._id,
+          paymentId: payload.id,
+          method: payload.method || 'razorpay_webhook',
+        });
+      }
     } finally {
       await deletePaymentLock(order._id);
     }
@@ -179,71 +155,77 @@ export const razorpayWebhook = asyncHandler(async (req, res) => {
 
 export const confirmDelivery = asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.orderId).populate('seller buyer');
-
   if (!order) return errorResponse(res, 404, 'Order not found.');
   if (order.buyer._id.toString() !== req.user._id.toString())
     return errorResponse(res, 403, 'Only buyer can confirm delivery.');
   if (order.escrowStatus !== 'funded' && order.escrowStatus !== 'delivered')
     return errorResponse(res, 400, `Cannot confirm in status: ${order.escrowStatus}`);
 
-  const releasedOrder = await Order.findOneAndUpdate(
-    { _id: order._id, escrowStatus: { $in: ['funded', 'delivered'] } },
-    {
-      $set: {
-        escrowStatus: 'released',
-        fundsReleasedAt: new Date(),
-        'delivery.deliveredAt': new Date(),
-      },
-      $push: { timeline: { status: 'released', message: 'Buyer confirmed delivery. Funds released to seller.' } },
-    },
-    { new: true }
-  ).populate('seller buyer');
-
-  if (!releasedOrder) {
-    const latestOrder = await Order.findById(order._id).populate('seller buyer');
-    return successResponse(res, 200, 'Delivery already confirmed.', { order: latestOrder });
-  }
-
-  const seller = await User.findById(releasedOrder.seller._id);
-  seller.wallet.balance += releasedOrder.sellerAmount;
-  seller.totalSales = (seller.totalSales || 0) + 1;
-  await seller.save();
-
-  notifyUser(releasedOrder.buyer._id.toString(), 'ORDER_RELEASED', { orderId: releasedOrder._id, status: 'released' });
-  notifyUser(releasedOrder.seller._id.toString(), 'ORDER_RELEASED', { orderId: releasedOrder._id, status: 'released' });
-  notifyUser(releasedOrder.seller._id.toString(), 'FUNDS_RELEASED', { orderId: releasedOrder._id, status: 'released', amount: releasedOrder.sellerAmount });
-  await sendEmail({ to: releasedOrder.seller.email, template: 'fundsReleased', data: releasedOrder.sellerAmount });
+  const releasedOrder = await EscrowService.confirmDelivery({
+    orderId: req.params.orderId,
+    buyerId: req.user._id,
+  });
 
   successResponse(res, 200, 'Delivery confirmed. Funds released to seller.', { order: releasedOrder });
-  
 });
 
-
 export const autoReleaseEscrow = asyncHandler(async (req, res) => {
-  const order = await Order.findOneAndUpdate(
-    { _id: req.params.orderId, escrowStatus: 'funded' },
-    {
-      $set: { escrowStatus: 'released', fundsReleasedAt: new Date() },
-      $push: { timeline: { status: 'released', message: 'Funds auto-released after 7 days.' } },
-    },
-    { new: true }
-  ).populate('seller');
-  if (!order) return res.json({ skipped: true });
-
-  const seller = await User.findById(order.seller._id);
-  seller.wallet.balance += order.sellerAmount;
-  seller.totalSales = (seller.totalSales || 0) + 1;
-  await seller.save();
-
-  notifyUser(order.buyer.toString(), 'ORDER_RELEASED', { orderId: order._id, status: 'released' });
-  notifyUser(order.seller._id.toString(), 'ORDER_RELEASED', { orderId: order._id, status: 'released' });
-  notifyUser(order.seller._id.toString(), 'FUNDS_RELEASED', { orderId: order._id, status: 'released', amount: order.sellerAmount });
-  await sendEmail({ to: order.seller.email, template: 'fundsReleased', data: order.sellerAmount });
-
-  res.json({ success: true });
+  const result = await EscrowService.autoReleaseOrder(req.params.orderId);
+  res.json(result);
 });
 
 export const getWallet = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select('wallet');
   successResponse(res, 200, 'Wallet fetched.', { wallet: user.wallet });
+});
+
+export const requestPayout = asyncHandler(async (req, res) => {
+  const { amount, bankDetails } = req.body;
+  const numAmount = Number(amount);
+
+  if (!numAmount || numAmount < 100) {
+    return errorResponse(res, 400, 'Minimum payout amount is ₹100.');
+  }
+  if (!bankDetails?.accountNumber || !bankDetails?.ifscCode || !bankDetails?.accountHolderName) {
+    return errorResponse(res, 400, 'Complete bank details (account number, IFSC, account holder name) are required.');
+  }
+
+  const payout = await LedgerService.requestPayout({
+    userId: req.user._id,
+    amount: numAmount,
+    bankDetails: {
+      accountNumber: bankDetails.accountNumber.trim(),
+      ifscCode: bankDetails.ifscCode.trim().toUpperCase(),
+      accountHolderName: bankDetails.accountHolderName.trim(),
+      bankName: bankDetails.bankName ? bankDetails.bankName.trim() : 'Bank',
+    },
+    payoutMethod: 'bank_transfer',
+  });
+
+  successResponse(res, 201, 'Payout request submitted successfully.', { payout });
+});
+
+export const getLedgerTransactions = asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 20;
+  const skip = (page - 1) * limit;
+
+  const [transactions, total] = await Promise.all([
+    Transaction.find({ user: req.user._id })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('order', 'escrowStatus amount product delivery'),
+    Transaction.countDocuments({ user: req.user._id }),
+  ]);
+
+  successResponse(res, 200, 'Transactions fetched.', {
+    transactions,
+    pagination: { total, page, pages: Math.ceil(total / limit) },
+  });
+});
+
+export const getPayouts = asyncHandler(async (req, res) => {
+  const payouts = await Payout.find({ user: req.user._id }).sort({ createdAt: -1 });
+  successResponse(res, 200, 'Payout requests fetched.', { payouts });
 });

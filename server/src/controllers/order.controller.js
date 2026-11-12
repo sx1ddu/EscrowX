@@ -1,6 +1,7 @@
 import asyncHandler from 'express-async-handler';
 import Order from '../models/order.model.js';
 import Product from '../models/product.model.js';
+import EscrowService from '../services/escrow.service.js';
 import { successResponse, errorResponse } from '../utils/apiResponse.js';
 import { notifyUser } from '../sockets/index.js';
 
@@ -22,6 +23,9 @@ export const placeOrder = asyncHandler(async (req, res) => {
   );
   if (!claimedProduct) return errorResponse(res, 409, 'Product already sold.');
 
+  const platformFee = Math.round(product.price * 0.02);
+  const sellerAmount = product.price - platformFee;
+
   let order;
   try {
     order = await Order.create({
@@ -29,9 +33,11 @@ export const placeOrder = asyncHandler(async (req, res) => {
       seller:  product.seller._id,
       product: product._id,
       amount:  product.price,
+      platformFee,
+      sellerAmount,
       delivery: { method: deliveryMethod || 'shipping', address },
       notes,
-      timeline: [{ status: 'pending', message: 'Order placed. Awaiting payment.' }],
+      timeline: [{ status: 'pending', message: 'Order placed. Awaiting payment.', timestamp: new Date() }],
     });
   } catch (err) {
     await Product.findByIdAndUpdate(productId, { status: 'active' });
@@ -80,21 +86,11 @@ export const getOrderById = asyncHandler(async (req, res) => {
 // @PATCH /api/orders/:id/mark-delivered — Seller marks as delivered
 export const markDelivered = asyncHandler(async (req, res) => {
   const { trackingId } = req.body;
-  const order = await Order.findById(req.params.id);
-  if (!order) return errorResponse(res, 404, 'Order not found.');
-  if (order.seller.toString() !== req.user._id.toString())
-    return errorResponse(res, 403, 'Only seller can mark delivered.');
-  if (order.escrowStatus !== 'funded')
-    return errorResponse(res, 400, 'Order must be funded to mark delivered.');
-
-  order.escrowStatus        = 'delivered';
-  order.delivery.trackingId = trackingId;
-  order.delivery.deliveredAt = new Date();
-  order.timeline.push({ status: 'delivered', message: 'Seller marked as delivered.' });
-  await order.save();
-
-  notifyUser(order.buyer.toString(), 'ORDER_DELIVERED', { orderId: order._id, status: 'delivered' });
-  notifyUser(order.seller.toString(), 'ORDER_DELIVERED', { orderId: order._id, status: 'delivered' });
+  const order = await EscrowService.markDelivered({
+    orderId: req.params.id,
+    sellerId: req.user._id,
+    trackingId,
+  });
 
   successResponse(res, 200, 'Order marked as delivered.', { order });
 });
@@ -113,7 +109,7 @@ export const cancelOrder = asyncHandler(async (req, res) => {
 
   order.escrowStatus       = 'cancelled';
   order.cancellationReason = reason;
-  order.timeline.push({ status: 'cancelled', message: `Cancelled: ${reason}` });
+  order.timeline.push({ status: 'cancelled', message: `Cancelled: ${reason}`, timestamp: new Date() });
   await order.save();
   await Product.findByIdAndUpdate(order.product, { status: 'active' });
 
