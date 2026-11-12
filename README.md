@@ -1,6 +1,6 @@
-# TrustTrade — Escrow-Based P2P Marketplace
+# EscrowX — Escrow-Based P2P Marketplace
 
-TrustTrade is a full-stack peer-to-peer marketplace where every order is protected by escrow: a buyer's payment is held until delivery is confirmed (or auto-released after a grace period), with built-in disputes, real-time chat, and AI-assisted listings and fraud scoring.
+EscrowX is a full-stack peer-to-peer marketplace where every order is protected by escrow: a buyer's payment is held until delivery is confirmed (or auto-released after a grace period), with built-in disputes, real-time chat, and AI-assisted listings and fraud scoring.
 
 Built with the **MERN** stack (MongoDB, Express, React, Node.js) plus Socket.IO for real-time features, Redis/Bull for background jobs, Razorpay for payments, and Google Gemini for AI features.
 
@@ -45,7 +45,7 @@ Built with the **MERN** stack (MongoDB, Express, React, Node.js) plus Socket.IO 
 ## 📂 Project Structure
 
 ```
-TrustTrade/
+EscrowX/
 ├── client/                      # React frontend (Vite)
 │   └── src/
 │       ├── components/          # auth guards, layout, shared UI
@@ -89,7 +89,7 @@ TrustTrade/
 
 ```bash
 git clone <repo-url>
-cd TrustTrade
+cd EscrowX
 
 # Backend
 cd server
@@ -111,7 +111,7 @@ NODE_ENV=development
 CLIENT_URL=http://localhost:5173
 
 # MongoDB
-MONGO_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/trusttrade
+MONGO_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/escrowx
 
 # JWT
 JWT_ACCESS_SECRET=your_access_secret
@@ -145,7 +145,7 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your_email@gmail.com
 SMTP_PASS=your_app_password
-EMAIL_FROM=TrustTrade <noreply@trusttrade.com>
+EMAIL_FROM=EscrowX <noreply@escrowx.com>
 
 # Google Gemini (AI descriptions & dispute risk scoring)
 GEMINI_API_KEY=your_gemini_api_key
